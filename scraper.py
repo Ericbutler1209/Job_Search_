@@ -2,6 +2,7 @@
 from bs4 import BeautifulSoup
 import requests
 from pathlib import Path
+import csv
 
 def banner():
     ascii_art = r"""
@@ -96,6 +97,41 @@ def scrape_southern_mission() -> str:
                or soup.get_text(" ", strip=True)
     return text or ""
 
+# ---------- PART III: Fake jobs to CSV ----------
+def scrape_fake_jobs_to_csv(url: str = "https://realpython.github.io/fake-jobs/",
+                            out_csv: str = "fake_jobs.csv") -> int:
+    """
+    Scrape fake job postings and write them to a CSV with header:
+    Job Title, Company, Location, Date Posted
+    Returns number of rows written (excluding header).
+    """
+    html = fetch_html(url)
+    soup = BeautifulSoup(html, "lxml")
+
+    cards = soup.select("div.card-content")
+    rows = []
+
+    for card in cards:
+        title = card.select_one("h2.title")
+        company = card.select_one("h3.subtitle")
+        location = card.select_one("p.location")
+        date = card.select_one("time")
+
+        rows.append({
+            "Job Title": (title.get_text(strip=True) if title else ""),
+            "Company": (company.get_text(strip=True) if company else ""),
+            "Location": (location.get_text(strip=True) if location else ""),
+            "Date Posted": (date.get_text(strip=True) if date else ""),
+        })
+
+    # write CSV
+    with open(out_csv, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["Job Title", "Company", "Location", "Date Posted"])
+        writer.writeheader()
+        writer.writerows(rows)
+
+    return len(rows)
+
 def main():
     banner()
     purpose()
@@ -119,6 +155,14 @@ def main():
         save_text("southern_mission.txt", southern_text)
     except Exception as e:
         print(f"Southern scrape failed: {e}\n")
+
+         # Fake jobs -> CSV
+    print("Scraping fake job postings and saving to fake_jobs.csv …")
+    try:
+        count = scrape_fake_jobs_to_csv()
+        print(f"Saved {count} rows to fake_jobs.csv")
+    except Exception as e:
+        print(f"Fake jobs scrape failed: {e}")
 
 if __name__ == "__main__":
     main()
