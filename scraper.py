@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import requests
 from pathlib import Path
 import csv
+from datetime import datetime
 
 def banner():
     ascii_art = r"""
@@ -132,6 +133,68 @@ def scrape_fake_jobs_to_csv(url: str = "https://realpython.github.io/fake-jobs/"
 
     return len(rows)
 
+    # -------------------- BONUS FEATURE --------------------
+def _parse_date(s: str) -> datetime:
+    try:
+        return datetime.strptime(s.strip(), "%Y-%m-%d")
+    except Exception:
+        return datetime.min
+
+
+def scrape_fake_jobs_to_csv_filtered(
+    url: str = "https://realpython.github.io/fake-jobs/",
+    out_csv: str = "fake_jobs_filtered.csv",
+    title_keyword: str | None = "Python",
+    min_date: str | None = "2021-04-05"
+) -> int:
+    """Filter, deduplicate, and sort job listings; export to new CSV."""
+    soup = BeautifulSoup(fetch_html(url), "lxml")
+    cards = soup.select("div.card-content")
+    rows: list[dict[str, str]] = []
+
+    for card in cards:
+        title = card.select_one("h2.title")
+        company = card.select_one("h3.subtitle")
+        location = card.select_one("p.location")
+        date = card.select_one("time")
+
+        rows.append({
+            "Job Title": title.get_text(strip=True) if title else "",
+            "Company": company.get_text(strip=True) if company else "",
+            "Location": location.get_text(strip=True) if location else "",
+            "Date Posted": date.get_text(strip=True) if date else "",
+        })
+
+    # Filter by keyword
+    if title_keyword:
+        kw = title_keyword.lower()
+        rows = [r for r in rows if kw in r["Job Title"].lower()]
+
+    # Filter by date
+    if min_date:
+        min_dt = _parse_date(min_date)
+        rows = [r for r in rows if _parse_date(r["Date Posted"]) >= min_dt]
+
+    # Deduplicate
+    seen = set()
+    unique_rows = []
+    for r in rows:
+        key = (r["Job Title"], r["Company"], r["Location"], r["Date Posted"])
+        if key not in seen:
+            seen.add(key)
+            unique_rows.append(r)
+
+    # Sort by date descending
+    unique_rows.sort(key=lambda r: _parse_date(r["Date Posted"]), reverse=True)
+
+    # Save new CSV
+    with open(out_csv, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["Job Title", "Company", "Location", "Date Posted"])
+        writer.writeheader()
+        writer.writerows(unique_rows)
+
+    return len(unique_rows)
+
 def main():
     banner()
     purpose()
@@ -163,6 +226,18 @@ def main():
         print(f"Saved {count} rows to fake_jobs.csv")
     except Exception as e:
         print(f"Fake jobs scrape failed: {e}")
+
+         # BONUS
+    print("Creating filtered/sorted job list (Python jobs since 2021-04-05) …")
+    try:
+        kept = scrape_fake_jobs_to_csv_filtered(
+            title_keyword="Python",
+            min_date="2021-04-05",
+            out_csv="fake_jobs_filtered.csv"
+        )
+        print(f"Saved {kept} rows to fake_jobs_filtered.csv")
+    except Exception as e:
+        print(f"Filtered jobs export failed: {e}")
 
 if __name__ == "__main__":
     main()
